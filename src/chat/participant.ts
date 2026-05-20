@@ -58,12 +58,12 @@ function buildHistoryMessages(
   // Walk history newest-first so we can drop oldest turns when over budget
   const entries: vscode.LanguageModelChatMessage[] = [];
   for (const turn of history) {
-    if (turn instanceof vscode.ChatRequestTurn) {
+    if ('prompt' in turn) {
       const label = turn.participant && turn.participant !== PARTICIPANT_ID
         ? `[User to @${turn.participant}]: `
         : '';
       entries.push(vscode.LanguageModelChatMessage.User(`${label}${turn.prompt}`));
-    } else if (turn instanceof vscode.ChatResponseTurn) {
+    } else if ('response' in turn) {
       const text = turn.response
         .filter((p): p is vscode.ChatResponseMarkdownPart => p instanceof vscode.ChatResponseMarkdownPart)
         .map(p => p.value.value)
