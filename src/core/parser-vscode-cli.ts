@@ -23,6 +23,13 @@ interface CLIEvent {
   id?: string;
 }
 
+/* The desktop Copilot app and the terminal Copilot CLI both write
+ * ~/.copilot/session-state/<id>/events.jsonl. Only the app emits the
+ * remoteSteerable field on session.start, so we use it to tell them apart. */
+function harnessName(state: CLIParseState): string {
+  return state.isApp ? 'GitHub Copilot App' : 'GitHub Copilot CLI';
+}
+
 /** Accumulated state for a single user turn (user.message → next user.message). */
 interface TurnState {
   userMsg: string;
@@ -46,6 +53,7 @@ interface TurnState {
 
 interface CLIParseState {
   sessionId: string;
+  isApp: boolean;
   startTime: string | null;
   currentModelId: string;
   currentReasoningEffort: 'max' | 'high' | 'medium' | 'low' | null;
@@ -136,7 +144,7 @@ function flushTurn(state: CLIParseState): void {
     timestamp: msgTs,
     messageText: turn.userMsg,
     responseText,
-    agentName: 'GitHub Copilot CLI',
+    agentName: harnessName(state),
     agentMode: turn.agentMode || 'agent',
     modelId: turn.modelId || state.currentModelId,
     toolsUsed: [...turn.toolNames],
@@ -181,6 +189,7 @@ function countImageVariables(turn: TurnState, variables: unknown): void {
 function handleSessionStart(ev: CLIEvent, state: CLIParseState, wsId: string): void {
   const data = ev.data || {};
   state.sessionId = str(data.sessionId) || wsId;
+  state.isApp = 'remoteSteerable' in data;
   state.startTime = str(data.startTime) || ev.timestamp || null;
   state.currentModelId = str(data.selectedModel);
   state.currentReasoningEffort = canonicalizeReasoningEffort(str(data.reasoningEffort))
@@ -349,6 +358,7 @@ function handleCliEvent(ev: CLIEvent, state: CLIParseState, wsId: string): void 
 function createInitialCliState(wsId: string): CLIParseState {
   return {
     sessionId: wsId,
+    isApp: false,
     startTime: null,
     currentModelId: '',
     currentReasoningEffort: null,
@@ -375,7 +385,7 @@ function finalizeCliSession(
     workspaceId: wsId,
     workspaceName: wsName,
     location: 'cli',
-    harness: 'GitHub Copilot CLI',
+    harness: harnessName(state),
     creationDate: creationDate ?? undefined,
     requests: state.requests,
     modelUsage: state.modelUsage,

@@ -137,6 +137,7 @@ export interface ExtensionMethodMap extends RpcMethodMap {
   saveModelBudgets: { params: { budgets: Record<string, number> }; result: { ok: boolean } };
   loadModelBudgets: { params: Record<string, unknown> | undefined; result: Record<string, number> };
   showOutput: { params: undefined; result: { ok: boolean } };
+  getCapabilities: { params: Record<string, unknown> | undefined; result: { host: 'vscode' | 'canvas'; llm: boolean } };
 }
 
 export type ExtensionMethodName = keyof ExtensionMethodMap;

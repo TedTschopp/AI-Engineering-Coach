@@ -10,14 +10,19 @@ on:
   issues:
     types: [opened, reopened]
   reaction: eyes
+  # Allow triage to run for issues opened by anyone, including users
+  # without write access (the typical case for external issue authors).
+  roles: all
 
 permissions: read-all
 
 network: defaults
 
-# This workflow runs often, so use a small model to keep costs down.
+# This workflow runs often, so use a cost-efficient model.
+# Note: the `small` alias resolves to gpt-5.4-mini, which is not accessible
+# via the /chat/completions endpoint, so pin an explicit supported model.
 engine:
-  model: small
+  model: gpt-5.4
 
 safe-outputs:
   add-labels:

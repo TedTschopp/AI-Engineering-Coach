@@ -12,6 +12,7 @@ import { updateTelemetry } from './telemetry-strip';
 import { formatStatCount } from './loading-grid-model';
 import { renderWorkspaceGrid, updateWorkspaceCell } from './loading-grid-view';
 import { buildSkippedBanner } from './skipped-banner';
+import { loadCapabilities, llmAvailable } from './capabilities';
 import { html, render, unmount, ComponentChildren } from './render';
 import { renderDashboard } from './page-dashboard';
 import { renderPatterns } from './page-patterns';
@@ -314,9 +315,11 @@ function onDataReady(currentWorkspace: string, skipped?: { skippedFiles: number;
     }
   }).catch(() => {});
 
-  navigateTo(currentPage);
-  refreshNavBadges(currentFilter);
-  maybeShowSkippedBanner();
+  void loadCapabilities().finally(() => {
+    navigateTo(currentPage);
+    refreshNavBadges(currentFilter);
+    maybeShowSkippedBanner();
+  });
 }
 
 /** After load, if any session files failed to parse, show a compact, dismissible notice above the
@@ -353,6 +356,7 @@ document.addEventListener('click', (e) => {
 
 export function navigateTo(page: string): void {
   page = normalizePageForFeatureFlags(page);
+  if (!llmAvailable() && (page === 'skills' || page === 'level-up')) page = 'dashboard';
   currentPage = page;
   for (const a of $$<HTMLAnchorElement>('.nav-links a')) a.classList.toggle('active', a.dataset.page === page);
   void renderPage(page);
