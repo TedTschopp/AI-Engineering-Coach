@@ -8,7 +8,7 @@ description: "Track AI-generated code volume and model usage"
 
 The Output page shows your **Code Output** -- how much code your AI assistants have generated.
 
-> **Note:** A Token Usage tab exists but is temporarily hidden while we verify that reported numbers align with GitHub's billing data.
+> **Note:** Token Usage includes estimated costs and AI credits derived from locally available session data. Use it as a workflow optimization signal, not as a billing reference.
 
 ## Code Output
 

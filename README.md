@@ -152,8 +152,8 @@ A few features depend on the local VS Code language model and are hidden in canv
 
 | Page         | Description                                                                                 |
 | ------------ | ------------------------------------------------------------------------------------------- |
-| **Output**   | Generated code volume by language, model usage table _(token breakdown temporarily hidden)_ |
-| **Burndown** | Monthly AI token budget progress with projections _(temporarily disabled)_                  |
+| **Output**   | Generated code volume by language plus estimated cost, AI credits, and token breakdowns      |
+| **Burndown** | Monthly AI token budget progress with projections                                           |
 | **Patterns** | 7×24 activity heatmap and work-life balance signals                                         |
 
 ### Improve

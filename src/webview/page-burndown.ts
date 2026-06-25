@@ -6,10 +6,10 @@
 /* Burndown page renderer — token consumption only */
 
 import { DateFilter } from '../core/types';
-import { FF_TOKEN_REPORTING_ENABLED } from '../core/constants';
 
 import { rpc, createChart, destroyChartById, COLORS, formatNum, vscode } from './shared';
 import { html, render, CanvasEl, StatCard } from './render';
+import { isTokenReportingEnabled } from './token-reporting-state';
 
 interface AiCreditBdData {
   dayOfMonth: number;
@@ -120,16 +120,14 @@ async function loadModelBudgetsFromDisk(): Promise<void> {
 }
 
 export function renderBurndown(container: HTMLElement, currentFilter: DateFilter): void {
-  if (!FF_TOKEN_REPORTING_ENABLED) {
+  if (!isTokenReportingEnabled()) {
     render(html`
       <h1>Burndown</h1>
       <div class="feature-gated-notice">
-        <h2>Burndown is temporarily disabled</h2>
+        <h2>Burndown is disabled</h2>
         <p>
-          This feature has been disabled temporarily until we are able to verify
-          that the reporting is aligned with what is reported by GitHub.
-          It will be re-enabled once the billing system is active and numbers
-          can be validated.
+          Turn on Token Reporting from the Dashboard to show estimated costs,
+          AI credits, token usage, and budget burndown.
         </p>
       </div>
     `, container);

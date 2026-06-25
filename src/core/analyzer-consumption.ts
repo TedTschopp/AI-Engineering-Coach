@@ -349,7 +349,10 @@ export class ConsumptionAnalyzer extends AnalyzerBase {
       this.applyAiCreditRequest(summary, request, billing.get(request));
     }
 
-    summary.topRequests.sort((a, b) => (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens));
+    summary.topRequests.sort((a, b) =>
+      (b.credits - a.credits) ||
+      ((b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens))
+    );
     summary.topRequests.splice(10);
     const allModels = Array.from(summary.costByModel.keys()).sort((a, b) =>
       (summary.costByModel.get(b)?.credits || 0) - (summary.costByModel.get(a)?.credits || 0)

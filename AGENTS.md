@@ -110,6 +110,14 @@ Rules move pending → review → approve → reload; edits revoke trust. See
 [`docs/content/improve/anti-patterns.md`](docs/content/improve/anti-patterns.md) and
 [`docs/content/improve/rule-editor.md`](docs/content/improve/rule-editor.md).
 
+## Runtime Token Reporting Toggle
+
+- Token/cost reporting must stay runtime-toggleable, not compile-time-only.
+- Default is `FF_TOKEN_REPORTING_ENABLED = true` in [constants](src/core/constants.ts).
+- The live preference is persisted with `tokenReportingEnabled` in VS Code `globalState`; preserve [token-reporting](src/core/token-reporting.ts) and [token-reporting-state](src/webview/token-reporting-state.ts).
+- Dashboard includes a Token Reporting button that hides/shows Output → Token Usage and Burndown without rebuild/reload.
+- Rebuilds and Git resyncs should preserve this runtime toggle and the cost UI labels: `Estimated Cost`, `AI Credits`, `Model Cost and Token Breakdown`, `Top Requests by Estimated Cost`.
+
 ## Documentation index
 
 These pages are published at https://microsoft.github.io/AI-Engineering-Coach/. The links below

@@ -25,8 +25,8 @@ The extension is organized into three sections: **Observe**, **Measure**, and **
 
 | Page | What it shows |
 | --- | --- |
-| **Output** | Two tabs -- **Code Output** (generated code volume by language and workspace) and **Token Usage** (model usage table with per-model token breakdown) *(Token Usage temporarily hidden)* |
-| **Burndown** | Monthly token budget progress with projection *(temporarily disabled)* |
+| **Output** | Two tabs -- **Code Output** (generated code volume by language and workspace) and **Token Usage** (estimated cost, AI credits, and per-model token breakdown) |
+| **Burndown** | Monthly token budget progress with projection |
 | **Patterns** | 7x24 activity heatmap and work-life balance signals |
 
 ### Improve

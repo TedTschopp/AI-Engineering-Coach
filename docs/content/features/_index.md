@@ -14,7 +14,7 @@ AI Engineer Coach organizes its capabilities into three areas that mirror a cont
 ## Measure
 
 - [Output](/measure/output/) -- AI-generated lines of code and model usage breakdown
-- [Burndown](/measure/burndown/) -- Track AI credit consumption against your monthly allowance *(temporarily disabled)*
+- [Burndown](/measure/burndown/) -- Track AI credit consumption against your monthly allowance
 - [Activity Patterns](/measure/patterns/) -- Work-hour heatmaps, calendar views, and per-project breakdowns
 
 ## Improve

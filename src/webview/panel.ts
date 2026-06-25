@@ -12,6 +12,7 @@ import { clearCache, findLogsDirs, parseAllLogsViaWorker, ParseResult } from '..
 import { hasExternalHarnessSources } from '../core/parser-harnesses';
 import { runtimeDebug } from '../core/runtime-debug';
 import { WebviewMessage } from '../core/types';
+import { TOKEN_REPORTING_STATE_KEY, readTokenReportingEnabled } from '../core/token-reporting';
 import { panelCache } from './panel-cache';
 import { clearCatalogCache } from './panel-catalog';
 import { getDashboardHtml, getErrorHtml } from './panel-html';
@@ -21,6 +22,14 @@ import { DashboardSidebarProvider } from './panel-sidebar';
 import { isRequestMessage, isSafeExternalHttpsUrl, postResponse, errorResult } from './panel-shared';
 
 export { DashboardSidebarProvider } from './panel-sidebar';
+
+const TOKEN_REPORTING_RPC_METHODS = new Set([
+  'getConsumption',
+  'getBurndown',
+  'getAiCredits',
+  'getAiCreditBurndown',
+  'getTokenCoverage',
+]);
 
 export class DashboardPanel {
   private static instance: DashboardPanel | undefined;
@@ -310,6 +319,12 @@ export class DashboardPanel {
       return;
     }
 
+    // Runtime preference persistence — handled before data readiness check.
+    if (msg.method === 'saveTokenReportingSetting' || msg.method === 'loadTokenReportingSetting') {
+      this.handleTokenReportingMessage(msg);
+      return;
+    }
+
     // Budget persistence — handled before data readiness check
     if (msg.method === 'saveModelBudgets' || msg.method === 'loadModelBudgets') {
       this.handleBudgetMessage(msg);
@@ -324,6 +339,11 @@ export class DashboardPanel {
     }
 
     if (this.requestService.tryHandle(msg)) return;
+
+    if (TOKEN_REPORTING_RPC_METHODS.has(msg.method) && !this.getTokenReportingEnabled()) {
+      try { postResponse(this.panel.webview, msg.id, errorResult('Token reporting is disabled')); } catch { /* disposed */ }
+      return;
+    }
 
     if (!this.dataReady || !this.analyzer || !this.parseResult) {
       this.pendingMessages.push(msg);
@@ -378,6 +398,26 @@ export class DashboardPanel {
   }
 
   private static readonly BUDGET_STATE_KEY = 'modelBudgets';
+
+  private getTokenReportingEnabled(): boolean {
+    return readTokenReportingEnabled(this.globalState);
+  }
+
+  private handleTokenReportingMessage(msg: Extract<WebviewMessage, { type: 'request' }>): void {
+    if (msg.method === 'saveTokenReportingSetting') {
+      const enabled = (msg.params as Record<string, unknown> | undefined)?.enabled;
+      if (typeof enabled !== 'boolean') {
+        try { postResponse(this.panel.webview, msg.id, errorResult('Invalid token reporting setting')); } catch { /* disposed */ }
+        return;
+      }
+      this.globalState.update(TOKEN_REPORTING_STATE_KEY, enabled).then(
+        () => { if (!this.disposed) try { postResponse(this.panel.webview, msg.id, { enabled }); } catch { /* disposed */ } },
+        () => { if (!this.disposed) try { postResponse(this.panel.webview, msg.id, errorResult('Failed to save token reporting setting')); } catch { /* disposed */ } },
+      );
+    } else {
+      try { postResponse(this.panel.webview, msg.id, { enabled: this.getTokenReportingEnabled() }); } catch { /* disposed */ }
+    }
+  }
 
   private handleBudgetMessage(msg: Extract<WebviewMessage, { type: 'request' }>): void {
     if (msg.method === 'saveModelBudgets') {

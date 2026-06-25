@@ -25,8 +25,8 @@ import {
   formatSessions,
   formatContextHealth,
 } from './formatters';
-import { FF_TOKEN_REPORTING_ENABLED } from '../core/constants';
 import { redactSecrets } from '../core/redact-secrets';
+import { readTokenReportingEnabled } from '../core/token-reporting';
 
 /* ---- shared helpers ---- */
 
@@ -71,6 +71,8 @@ interface ToolDef {
   prepareMessage: string;
 }
 
+let currentTokenReportingStore: vscode.Memento | undefined;
+
 const TOOL_DEFS: ToolDef[] = [
   {
     name: 'aiEngineerCoach_summary',
@@ -91,7 +93,7 @@ const TOOL_DEFS: ToolDef[] = [
     description: 'Get AI credit usage including total credits consumed, per-model breakdown, daily trend, and most expensive requests. Use to discuss cost optimization.',
     inputSchema: { type: 'object', properties: { ...FILTER_SCHEMA } },
     invoke: (a, input) => {
-      if (FF_TOKEN_REPORTING_ENABLED) {
+      if (readTokenReportingEnabled(currentTokenReportingStore)) {
         return textResult(formatCredits(a, parseFilter(input)));
       }
       return new vscode.LanguageModelToolResult([
@@ -191,6 +193,7 @@ const TOOL_DEFS: ToolDef[] = [
 /* ---- registration ---- */
 
 export function registerTools(context: vscode.ExtensionContext, getAnalyzer: () => Analyzer | undefined): void {
+  currentTokenReportingStore = context.globalState;
   for (const def of TOOL_DEFS) {
     const tool: vscode.LanguageModelTool<Record<string, unknown>> = {
       invoke(options, _token) {

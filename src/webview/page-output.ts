@@ -6,10 +6,11 @@
 /* Output page renderer -- merges Production & Consumption into a single tabbed view */
 
 import { DateFilter } from '../core/types';
-import { TOKEN_DATA_AVAILABLE_FROM, FF_TOKEN_REPORTING_ENABLED } from '../core/constants';
+import { TOKEN_DATA_AVAILABLE_FROM } from '../core/constants';
 import { isoWeek } from '../core/helpers';
 import { rpc, createChart, formatNum, $$, PALETTE, COLORS, HARNESS_COLORS } from './shared';
 import { html, render, StatCard, CanvasEl, ComponentChildren } from './render';
+import { isTokenReportingEnabled } from './token-reporting-state';
 
 type AggLevel = 'daily' | 'weekly' | 'monthly';
 
@@ -55,6 +56,20 @@ function aggregateByWorkspace(
     byWs[ws] = agg;
   }
   return { labels: sortedKeys, byWs };
+}
+
+function formatEstimatedCredits(credits: number): string {
+  if (!Number.isFinite(credits) || credits <= 0) return '0';
+  if (credits < 0.01) return '<0.01';
+  if (credits < 100) return credits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.round(credits).toLocaleString();
+}
+
+function formatEstimatedUsd(credits: number): string {
+  const usd = credits * 0.01;
+  if (!Number.isFinite(usd) || usd <= 0) return '$0.00';
+  if (usd < 0.01) return '<$0.01';
+  return usd.toLocaleString(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 interface ProdData {
@@ -115,7 +130,7 @@ let activeRangeDays = 0;
 let activeTab: OutputTab = 'production';
 
 export async function renderOutput(container: HTMLElement, currentFilter: DateFilter): Promise<void> {
-  if (!FF_TOKEN_REPORTING_ENABLED && activeTab === 'token-usage') {
+  if (!isTokenReportingEnabled() && activeTab === 'token-usage') {
     activeTab = 'production';
   }
 
@@ -125,10 +140,10 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
   const APPROXIMATION_NOTICE = html`
     <div class="approximation-notice">
       <strong>Approximation only.</strong>${' '}
-      Token usage is estimated from the session data this extension can read
-      on your machine. It shows token consumption across all harnesses and
-      may not be fully accurate — it cannot reflect activity on other devices,
-      cloud-hosted agents, or harnesses this extension doesn't ingest.
+      Costs and credits are estimated from the session data this extension can
+      read on your machine. They may not match your final bill because this view
+      cannot reflect activity on other devices, cloud-hosted agents, or
+      harnesses this extension doesn't ingest.
       Use it as a workflow optimization signal, not as a billing reference.
     </div>
   `;
@@ -235,7 +250,7 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
     <div class="cons-range-bar" id="outputRange"></div>
     <div class="tab-bar" id="output-tabs">
       <button class=${`tab${activeTab === 'production' ? ' active' : ''}`} data-tab="production">Code Output</button>
-      ${FF_TOKEN_REPORTING_ENABLED ? html`<button class=${`tab${activeTab === 'token-usage' ? ' active' : ''}`} data-tab="token-usage">Token Usage</button>` : ''}
+      ${isTokenReportingEnabled() ? html`<button class=${`tab${activeTab === 'token-usage' ? ' active' : ''}`} data-tab="token-usage">Token Usage</button>` : ''}
     </div>
     <div id="output-tab-content"></div>
   `, container);
@@ -541,7 +556,7 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
     const hiddenModelCount = modelEntries.length - visibleModelEntries.length;
     const anyCached = visibleModelEntries.some(([, info]) => (info.cacheReadTokens + info.cacheWriteTokens) > 0);
     render(html`
-      <table class="data-table"><thead><tr><th>Model</th><th>Source</th><th>Requests</th><th>Input Tokens</th>${anyCached && html`<th title="Cached input tokens (read + write).">Cached</th>`}<th>Output Tokens</th><th>Data</th></tr></thead><tbody>
+      <table class="data-table"><thead><tr><th>Model</th><th>Source</th><th>Requests</th><th title="Estimated from local token data. 1 AI Credit = $0.01 USD.">Est. Cost</th><th title="Estimated AI Credits.">Credits</th><th>Input Tokens</th>${anyCached && html`<th title="Cached input tokens (read + write).">Cached</th>`}<th>Output Tokens</th><th>Data</th></tr></thead><tbody>
         ${visibleModelEntries.map(([model, info]) => {
           const dataTag = info.finalizableRequests === 0 && info.requests > 0
             ? html`<span class="missing-badge-inline" title="No finalizable requests for this model \u2014 all are pending or from a source that doesn't record tokens.">N/A</span>`
@@ -549,10 +564,18 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
               ? html`<span class="missing-badge" title=${info.missingPct + '% of finalizable requests for this model have no token data'}>missing ${info.missingPct}%</span>`
               : '\u2713';
           const cachedTotal = info.cacheReadTokens + info.cacheWriteTokens;
+          const costCell = info.countedRequests > 0
+            ? formatEstimatedUsd(info.credits)
+            : html`<span class="missing-badge-inline" title="No complete requests with billable input and output token data.">\u2014</span>`;
+          const creditsCell = info.countedRequests > 0
+            ? formatEstimatedCredits(info.credits)
+            : html`<span class="missing-badge-inline" title="No complete requests with billable input and output token data.">\u2014</span>`;
           return html`<tr>
             <td>${model}</td>
             <td>${(info.harnesses ?? []).map(h => html`<span class="harness-badge" style="--harness-color:${harnessColor(h)}" title=${h}>${h}</span> `)}</td>
             <td>${formatNum(info.requests)}</td>
+            <td>${costCell}</td>
+            <td>${creditsCell}</td>
             <td>${formatNum(info.inputTokens)}</td>
             ${anyCached && html`<td>${cachedTotal > 0 ? formatNum(cachedTotal) : html`<span class="missing-badge-inline">\u2014</span>`}</td>`}
             <td>${formatNum(info.outputTokens)}</td>
@@ -608,9 +631,13 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
   }
 
   function renderTopRequestsTable(target: HTMLElement, data: AiCreditRpcData): void {
+    const sortedRequests = [...data.topRequests].sort((a, b) =>
+      (b.credits - a.credits) ||
+      ((b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens))
+    );
     render(html`
-      <table class="data-table"><thead><tr><th>Date</th><th>Workspace</th><th>Source</th><th>Model</th><th>Total Tokens</th><th>Prompt</th></tr></thead><tbody>
-        ${data.topRequests.map(req => {
+      <table class="data-table"><thead><tr><th>Date</th><th>Workspace</th><th>Source</th><th>Model</th><th title="Estimated from local token data.">Est. Cost</th><th>Credits</th><th>Total Tokens</th><th>Prompt</th></tr></thead><tbody>
+        ${sortedRequests.map(req => {
           const d = new Date(req.timestamp).toLocaleDateString();
           const aggregated = req.aggregationKind === 'session-aggregated';
           const aggTitle = 'Estimated share of session-level totals reported by the harness \u2014 exact per-request input is not available.';
@@ -623,7 +650,13 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
             : html`<span class="missing-badge" title="No native token count.">missing</span>`;
           const wsCell = req.workspace || html`<span class="missing-badge">unknown</span>`;
           const harnessCell = req.harness ? html`<span class="harness-badge" style="--harness-color:${harnessColor(req.harness)}" title=${req.harness}>${req.harness}</span>` : '';
-          return html`<tr><td>${d}</td><td>${wsCell}</td><td>${harnessCell}</td><td>${req.model}</td><td>${tokensCell}</td><td><span class="prompt-preview-trigger" onclick=${(e: MouseEvent) => showPromptPopup(e, req.fullPrompt)}>${req.preview.slice(0, 50)}\u2026</span></td></tr>`;
+          const costCell = req.status === 'complete'
+            ? formatEstimatedUsd(req.credits)
+            : html`<span class="missing-badge-inline" title="Estimated cost requires complete input and output token data.">\u2014</span>`;
+          const creditsCell = req.status === 'complete'
+            ? formatEstimatedCredits(req.credits)
+            : html`<span class="missing-badge-inline" title="Estimated credits require complete input and output token data.">\u2014</span>`;
+          return html`<tr><td>${d}</td><td>${wsCell}</td><td>${harnessCell}</td><td>${req.model}</td><td>${costCell}</td><td>${creditsCell}</td><td>${tokensCell}</td><td><span class="prompt-preview-trigger" onclick=${(e: MouseEvent) => showPromptPopup(e, req.fullPrompt)}>${req.preview.slice(0, 50)}\u2026</span></td></tr>`;
         })}
       </tbody></table>
       ${data.topRequests.some(r => r.aggregationKind === 'session-aggregated') && html`<p class="credits-note"><span class="aggregated-badge">~value</span> = derived share of session-level totals (per-request data not reported by harness).</p>`}
@@ -644,11 +677,13 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
     render(html`
       ${APPROXIMATION_NOTICE}
       <div class="stat-grid" id="creditStats">
+        <${StatCard} label="Estimated Cost" value=${formatEstimatedUsd(data.totalCredits)} accent="var(--accent-yellow)" />
+        <${StatCard} label="AI Credits" value=${formatEstimatedCredits(data.totalCredits)} accent="var(--accent-blue)" />
         <${StatCard} label="Total Tokens" value=${formatNum(totalTokens)} accent="var(--accent-blue)" />
         <${StatCard} label="Input Tokens" value=${formatNum(data.totalInputTokens)} accent="var(--accent-green)" />
         <${StatCard} label="Output Tokens" value=${formatNum(data.totalOutputTokens)} accent="var(--accent-purple)" />
       </div>
-      <p class="credits-note">Totals reflect ${formatNum(data.countedRequests)} of ${formatNum(data.finalizableRequests)} finalizable requests with token data. Code completions are free and not counted. ${missingLabel}${partialLabel}${pendingLabel}${noDataLabel}</p>
+      <p class="credits-note">Estimated cost uses local token data and the configured rate card. 1 AI Credit = $0.01 USD. Totals reflect ${formatNum(data.countedRequests)} of ${formatNum(data.finalizableRequests)} finalizable requests with token data. Code completions are free and not counted. ${missingLabel}${partialLabel}${pendingLabel}${noDataLabel}</p>
       <div class="chart-tabs" style="margin-top:18px">
         <button class="chart-tab active" data-chart-tab="tokens">Token Consumption</button>
         <button class="chart-tab" data-chart-tab="tokens-ws">Tokens by Workspace</button>
@@ -658,9 +693,9 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
       <div id="chartTabTokensWs" class="chart-tab-panel"><${CanvasEl} id="creditTokenByWsChart" height=${350} title=${tokenByWsChartTitle()} /></div>
       <div id="chartTabTokensHarness" class="chart-tab-panel"><${CanvasEl} id="creditTokenByHarnessChart" height=${350} title=${tokenByHarnessChartTitle()} /></div>
       <div class="chart-wrap"><div class="chart-title">Token Breakdown <span class="info-icon" tabindex="0" role="button" aria-label="Token breakdown info">${'\u24d8'}<span class="info-popup">Cache token breakdown (cache read / cache write) is only available for harnesses that report it natively, such as Claude Code and Copilot CLI. VS Code Copilot chat sessions report a single aggregated input token count and do not break out cached vs. uncached tokens — this is a limitation of the upstream data format, not a bug.</span></span></div><canvas id="creditTokenPie" height=${250}></canvas></div>
-      <h2>Model Token Breakdown</h2>
+      <h2>Model Cost and Token Breakdown</h2>
       <div id="creditModelTable"></div>
-      <h2>Top Requests by Token Usage</h2>
+      <h2>Top Requests by Estimated Cost</h2>
       <div id="topRequestsTable"></div>
     `, target);
 
@@ -684,11 +719,11 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
 
 
   async function renderActiveTab(): Promise<void> {
-    if (!FF_TOKEN_REPORTING_ENABLED && activeTab === 'token-usage') {
+    if (!isTokenReportingEnabled() && activeTab === 'token-usage') {
       activeTab = 'production';
     }
     if (activeTab === 'production') await renderProductionTab();
-    else if (!FF_TOKEN_REPORTING_ENABLED) renderTokenUsageGated();
+    else if (!isTokenReportingEnabled()) renderTokenUsageGated();
     else await renderTokenUsageTab();
   }
 
@@ -697,12 +732,10 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
     const target = document.getElementById('output-tab-content')!;
     render(html`
       <div class="feature-gated-notice">
-        <h2>Token Usage is temporarily disabled</h2>
+        <h2>Token Usage is disabled</h2>
         <p>
-          This feature has been disabled temporarily until we are able to verify
-          that the reporting is aligned with what is reported by GitHub.
-          It will be re-enabled once the billing system is active and numbers
-          can be validated.
+          Turn on Token Reporting from the Dashboard to show estimated costs,
+          AI credits, token usage, and related breakdowns.
         </p>
       </div>
     `, target);
@@ -765,7 +798,7 @@ export async function renderOutput(container: HTMLElement, currentFilter: DateFi
       btn.classList.add('active');
       const tab = btn.dataset.tab;
       if (!tab) return;
-      if (!FF_TOKEN_REPORTING_ENABLED && tab === 'token-usage') return;
+      if (!isTokenReportingEnabled() && tab === 'token-usage') return;
       activeTab = tab as OutputTab;
       snapActiveRangeIfDisabled();
       refreshRangeBar();

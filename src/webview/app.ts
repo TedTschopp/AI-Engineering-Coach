@@ -6,7 +6,6 @@
 /* Webview entry -- runs in the browser context inside the VS Code webview */
 
 import { AntiPatternData, DateFilter, StatsResult } from '../core/types';
-import { FF_TOKEN_REPORTING_ENABLED } from '../core/constants';
 import { $, $$, rpc, destroyCharts, initMessageListener, withErrorBoundary, type WorkerTelemetry } from './shared';
 import { updateTelemetry } from './telemetry-strip';
 import { formatStatCount } from './loading-grid-model';
@@ -27,16 +26,11 @@ import { renderLevelUp } from './page-experiments';
 import { renderDataExplorer } from './page-data-explorer';
 import { renderRulePlayground } from './page-rule-playground';
 import { renderImageGallery } from './page-image-gallery';
+import { isTokenReportingEnabled, loadTokenReportingSetting, onTokenReportingChanged } from './token-reporting-state';
 
 function normalizePageForFeatureFlags(page: string): string {
-  if (!FF_TOKEN_REPORTING_ENABLED && page === 'burndown') return 'dashboard';
+  if (!isTokenReportingEnabled() && page === 'burndown') return 'dashboard';
   return page;
-}
-
-/* ---- Feature-flag gating: hide token-reporting nav items ---- */
-if (!FF_TOKEN_REPORTING_ENABLED) {
-  const burndownLink = document.querySelector<HTMLElement>('[data-page="burndown"]');
-  burndownLink?.parentElement?.remove();
 }
 
 /* ---- Global state ---- */
@@ -53,6 +47,26 @@ let lastSkippedLines = 0;
 export let navHint: string | undefined;
 export function setNavHint(hint: string | undefined): void { navHint = hint; }
 export function consumeNavHint(): string | undefined { const h = navHint; navHint = undefined; return h; }
+
+function syncTokenReportingChrome(): void {
+  const enabled = isTokenReportingEnabled();
+  const burndownItem = document.getElementById('nav-burndown-item')
+    ?? document.querySelector<HTMLElement>('[data-page="burndown"]')?.parentElement;
+  if (burndownItem) burndownItem.style.display = enabled ? '' : 'none';
+}
+
+syncTokenReportingChrome();
+
+onTokenReportingChanged(() => {
+  syncTokenReportingChrome();
+  if (!_dataIsReady) return;
+  const normalizedPage = normalizePageForFeatureFlags(currentPage);
+  if (normalizedPage !== currentPage) {
+    navigateTo(normalizedPage);
+    return;
+  }
+  renderPageLater(currentPage);
+});
 
 /* ---- Nav Badge Helpers ---- */
 function setBadge(id: string, value: string | number): void {
@@ -286,6 +300,16 @@ function handleProgress(msg: ProgressMessage): void {
 }
 
 function onDataReady(currentWorkspace: string, skipped?: { skippedFiles: number; skippedLines: number }): void {
+  void initializeDataReady(currentWorkspace, skipped);
+}
+
+async function initializeDataReady(currentWorkspace: string, skipped?: { skippedFiles: number; skippedLines: number }): Promise<void> {
+  try {
+    await loadTokenReportingSetting();
+  } catch {
+    // Keep the compiled/default value when the persisted preference is unavailable.
+  }
+  syncTokenReportingChrome();
   _dataIsReady = true;
   // Prefer the authoritative counts sent with `dataReady` (present even on a cache hit, where no
   // progress telemetry tick ever fires); fall back to whatever a telemetry tick captured.

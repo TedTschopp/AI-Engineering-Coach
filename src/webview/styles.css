@@ -3145,6 +3145,16 @@ h2 {
 .dash-scan-btn:hover {
   opacity: 0.85;
 }
+.token-reporting-section {
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  padding: 12px;
+}
+.token-reporting-toggle.token-reporting-off {
+  border: 1px solid var(--accent-orange, #d29922);
+  background: transparent;
+  color: var(--accent-orange, #d29922);
+}
 .dash-practice-row {
   display: flex;
   gap: 16px;

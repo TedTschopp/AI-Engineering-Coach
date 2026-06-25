@@ -138,6 +138,8 @@ export interface ExtensionMethodMap extends RpcMethodMap {
   loadModelBudgets: { params: Record<string, unknown> | undefined; result: Record<string, number> };
   showOutput: { params: undefined; result: { ok: boolean } };
   getCapabilities: { params: Record<string, unknown> | undefined; result: { host: 'vscode' | 'canvas'; llm: boolean } };
+  saveTokenReportingSetting: { params: { enabled: boolean }; result: { enabled: boolean } };
+  loadTokenReportingSetting: { params: Record<string, unknown> | undefined; result: { enabled: boolean } };
 }
 
 export type ExtensionMethodName = keyof ExtensionMethodMap;
